@@ -40,11 +40,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $cliOutput = "cli/build/reboot-cli.exe"
+          if (-not (Test-Path $cliOutput)) {
+            throw "Expected CLI output file not found: $cliOutput"
+          }
           $guiOutput = "gui/build/windows/x64/runner/Release"
           if (-not (Test-Path $guiOutput)) {
             throw "Expected GUI output directory not found: $guiOutput"
           }
-          Compress-Archive -Path "cli/build/reboot-cli.exe" -DestinationPath "artifacts/reboot-cli-windows.zip" -Force
+          Compress-Archive -Path $cliOutput -DestinationPath "artifacts/reboot-cli-windows.zip" -Force
           Compress-Archive -Path "$guiOutput/*" -DestinationPath "artifacts/reboot-gui-windows.zip" -Force
 
       - name: Upload artifacts to GitHub Release
