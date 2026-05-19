@@ -103,7 +103,7 @@ Future<void> _handleBuildCommand(CommandCall? call) async {
 }
 
 void _handleBuildListCommand(CommandCall commandCall) {
-  List<FortniteVersion> versions;
+  List<GameVersion> versions;
   try {
     versions = readVersions();
   }catch(error) {
@@ -156,12 +156,12 @@ Future<void> _handleBuildImportCommand(CommandCall call) async {
     return;
   }
 
-  final fortniteVersion = FortniteVersion(
+  final gameVersion = GameVersion(
       name: '',
       gameVersion: version,
       location: Directory(path)
   );
-  writeVersion(fortniteVersion);
+  writeVersion(gameVersion);
   print('');
   print('✅ Imported build: ${version.green()}');
 }
@@ -371,25 +371,25 @@ Future<void> _handleBuildDownloadCommand(CommandCall call) async {
   bool extracting = false;
   final downloader = Spinner.withTheme(
       icon: '✅',
-      rightPrompt: (status) => status != SpinnerStateType.inProgress ? 'Finished ${extracting ? 'extracting' : 'downloading'} ${parsedVersion.toString()}' : '${extracting ? 'Extracting' : 'Downloading'} ${parsedVersion.toString()} (${progress.round()}%)...',
+      rightPrompt: (status) => status != SpinnerStateType.inProgress ? 'Finished ${extracting ? 'extracting' : 'downloading'} ${parsedVersion.toString()}' : '${extracting ? 'Extracting' : 'Downloading'} ${parsedVersion.toString()} ${extracting ? '' : '- $progress%'}',
       theme: Theme.colorfulTheme.copyWith(successSuffix: '', errorPrefix: '❌', spinners: '🕐 🕑 🕒 🕓 🕔 🕕 🕖 🕗 🕘 🕙 🕚 🕛'.split(' '))
   ).interact();
   final parsedDirectory = Directory(path);
   final receivePort = ReceivePort();
   SendPort? sendPort;
   receivePort.listen((message) {
-    if(message is FortniteBuildDownloadProgress) {
+    if(message is GameBuildDownloadProgress) {
       if(message.progress >= 100) {
         sendPort?.send(kStopBuildDownloadSignal);
         stopDownloadServer();
         downloader.done();
         receivePort.close();
-        final fortniteVersion = FortniteVersion(
+        final gameVersion = GameVersion(
             name: "dummy",
             gameVersion: version,
             location: parsedDirectory
         );
-        writeVersion(fortniteVersion);
+        writeVersion(gameVersion);
         print('');
         print('✅ Downloaded build: ${version.green()}');
       }else {
@@ -406,7 +406,7 @@ Future<void> _handleBuildDownloadCommand(CommandCall call) async {
       print("❌ Cannot download build: $message");
     }
   });
-  final options = FortniteBuildDownloadOptions(
+  final options = GameBuildDownloadOptions(
       build,
       parsedDirectory,
       receivePort.sendPort
