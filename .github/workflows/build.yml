@@ -15,10 +15,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-
-    defaults:
-      run:
-        shell: bash
+      discussions: write
 
     steps:
       - name: Checkout repository
@@ -34,19 +31,13 @@ jobs:
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Get Dependencies (Common)
+      - name: Get Dependencies
         run: |
           cd common
           flutter pub get
-
-      - name: Get Dependencies (CLI)
-        run: |
-          cd cli
+          cd ../cli
           flutter pub get
-
-      - name: Get Dependencies (GUI)
-        run: |
-          cd gui
+          cd ../gui
           flutter pub get
 
       - name: Build CLI (Windows EXE)
@@ -60,33 +51,36 @@ jobs:
           flutter build windows --release
 
       - name: Prepare Artifacts
+        shell: pwsh
         run: |
-          mkdir -p release_assets
-          # Copy CLI
-          cp cli/reboot_cli.exe release_assets/
+          New-Item -ItemType Directory -Force -Path release_assets
           
-          # Copy GUI build files
-          if [ -d "gui/build/windows/x64/runner/Release" ]; then
-            cp -r gui/build/windows/x64/runner/Release/* release_assets/
-          fi
+          # CLI
+          Copy-Item "cli/reboot_cli.exe" -Destination "release_assets/"
           
-          # Copy extra DLLs if they exist
-          if [ -d "gui/dependencies/dlls" ]; then
-            cp gui/dependencies/dlls/*.dll release_assets/ 2>/dev/null || true
-          fi
+          # GUI
+          if (Test-Path "gui/build/windows/x64/runner/Release") {
+            Copy-Item -Path "gui/build/windows/x64/runner/Release/*" -Destination "release_assets/" -Recurse
+          }
           
-          # Zip everything
-          cd release_assets
-          7z a ../reboot_windows.zip *
+          # Additional DLLs
+          if (Test-Path "gui/dependencies/dlls") {
+            Copy-Item -Path "gui/dependencies/dlls/*.dll" -Destination "release_assets/" -ErrorAction SilentlyContinue
+          }
+          
+          # Create Zip
+          Compress-Archive -Path "release_assets/*" -DestinationPath "reboot_windows.zip" -Force
 
       - name: Generate Release Tag
         id: tag
+        shell: pwsh
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=Manual-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
-          fi
+          if ("${{ github.ref }}" -like "refs/tags/*") {
+            $tag = "${{ github.ref_name }}"
+          } else {
+            $tag = "Build-" + (Get-Date -Format "yyyy.MM.dd-HHmm")
+          }
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Push Release to Fork
         uses: softprops/action-gh-release@v2
@@ -100,6 +94,7 @@ jobs:
             - `reboot_cli.exe`
             - `reboot_windows.zip` (GUI and all tools)
           draft: false
+          make_latest: true
           prerelease: false
           files: |
             cli/reboot_cli.exe
