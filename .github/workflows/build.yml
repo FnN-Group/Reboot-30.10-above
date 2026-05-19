@@ -39,6 +39,7 @@ jobs:
           flutter pub get
           cd ../gui
           flutter pub get
+          flutter gen-l10n
 
       - name: Build CLI (Windows EXE)
         run: |
