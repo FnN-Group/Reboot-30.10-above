@@ -40,8 +40,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path artifacts -Force | Out-Null
+          $guiOutput = "gui/build/windows/x64/runner/Release"
+          if (-not (Test-Path $guiOutput)) {
+            throw "Expected GUI output directory not found: $guiOutput"
+          }
           Compress-Archive -Path "cli/build/reboot-cli.exe" -DestinationPath "artifacts/reboot-cli-windows.zip" -Force
-          Compress-Archive -Path "gui/build/windows/x64/runner/Release/*" -DestinationPath "artifacts/reboot-gui-windows.zip" -Force
+          Compress-Archive -Path "$guiOutput/*" -DestinationPath "artifacts/reboot-gui-windows.zip" -Force
 
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
