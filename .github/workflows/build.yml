@@ -16,6 +16,10 @@ jobs:
     permissions:
       contents: write
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -25,9 +29,10 @@ jobs:
         with:
           flutter-version: '3.19.0'
           channel: 'stable'
+          cache: true
 
-      - name: Setup Dart
-        uses: dart-lang/setup-dart@v1
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
 
       - name: Get Dependencies (Common)
         run: |
@@ -56,29 +61,44 @@ jobs:
 
       - name: Prepare Artifacts
         run: |
-          mkdir release_assets
+          mkdir -p release_assets
+          # Copy CLI
           cp cli/reboot_cli.exe release_assets/
-          cp -r gui/build/windows/x64/runner/Release/* release_assets/
-          cp gui/dependencies/dlls/*.dll release_assets/
+          
+          # Copy GUI build files
+          if [ -d "gui/build/windows/x64/runner/Release" ]; then
+            cp -r gui/build/windows/x64/runner/Release/* release_assets/
+          fi
+          
+          # Copy extra DLLs if they exist
+          if [ -d "gui/dependencies/dlls" ]; then
+            cp gui/dependencies/dlls/*.dll release_assets/ 2>/dev/null || true
+          fi
+          
+          # Zip everything
           cd release_assets
           7z a ../reboot_windows.zip *
 
       - name: Generate Release Tag
         id: tag
-        shell: bash
-        run: echo "release_tag=Build-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=Manual-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
+          fi
 
       - name: Push Release to Fork
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.tag.outputs.release_tag }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.tag.outputs.release_tag }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
           body: |
-            Automated build from commit ${{ github.sha }}
+            Automated build for Reboot 30.10+
             
-            **Files Included:**
-            - `reboot_cli.exe` (Standalone CLI)
-            - `reboot_windows.zip` (GUI + All required DLLs)
+            **Included:**
+            - `reboot_cli.exe`
+            - `reboot_windows.zip` (GUI and all tools)
           draft: false
           prerelease: false
           files: |
