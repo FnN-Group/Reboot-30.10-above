@@ -10,18 +10,11 @@ permissions:
   contents: write
 
 jobs:
-  build-and-upload:
+  build-cli:
     runs-on: windows-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.19.0'
-          channel: stable
 
       - name: Setup Dart
         uses: dart-lang/setup-dart@v1
@@ -35,6 +28,25 @@ jobs:
           dart pub get
           dart compile exe lib/main.dart -o build/reboot-cli.exe
 
+      - name: Upload CLI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-exe
+          path: cli/build/reboot-cli.exe
+
+  build-gui:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: stable
+          cache: true
+
       - name: Build GUI (Windows)
         shell: bash
         run: |
@@ -42,14 +54,10 @@ jobs:
           flutter pub get
           flutter build windows --release
 
-      - name: Package artifacts
+      - name: Locate GUI Release Directory
+        id: locate-gui
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path artifacts -Force | Out-Null
-          $cliOutput = "cli/build/reboot-cli.exe"
-          if (-not (Test-Path $cliOutput)) {
-            throw "Expected CLI output file not found: $cliOutput"
-          }
           $guiOutputCandidates = @(
             "gui/build/windows/x64/runner/Release",
             "gui/build/windows/x64/Release/Runner"
@@ -58,8 +66,39 @@ jobs:
           if (-not $guiOutput) {
             throw "Expected GUI output directory not found in: $($guiOutputCandidates -join ', ')"
           }
-          Compress-Archive -Path $cliOutput -DestinationPath "artifacts/reboot-cli-windows.zip" -Force
-          Compress-Archive -Path "$guiOutput/*" -DestinationPath "artifacts/reboot-gui-windows.zip" -Force
+          Write-Output "gui_path=$guiOutput" >> $env:GITHUB_OUTPUT
+
+      - name: Upload GUI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-release
+          path: ${{ steps.locate-gui.outputs.gui_path }}/*
+
+  package-and-release:
+    needs: [build-cli, build-gui]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download CLI Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cli-exe
+          path: cli-artifact
+
+      - name: Download GUI Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gui-release
+          path: gui-artifact
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          mkdir artifacts
+          cd cli-artifact
+          zip -r ../artifacts/reboot-cli-windows.zip *
+          cd ../gui-artifact
+          zip -r ../artifacts/reboot-gui-windows.zip *
+          cd ..
 
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
