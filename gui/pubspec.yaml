@@ -9,7 +9,7 @@ environment:
   # I have no clue who is still using Windows 7, but some users requested support, so might as well add it
   # Repository Issue: https://github.com/Auties00/Reboot-Launcher/issues/58
   # Flutter issue: https://github.com/flutter/flutter/issues/140830#issuecomment-1936397549
-  sdk: ">=3.0.0 <=3.19.0"
+  sdk: ">=3.0.0 <=4.0.0"
 
 dependencies:
   # The flutter SDK
