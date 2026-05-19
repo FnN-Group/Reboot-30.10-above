@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:reboot_common/common.dart';
 
-List<FortniteVersion> readVersions() {
+List<GameVersion> readVersions() {
   final file = _versionsFile;
   if(!file.existsSync()) {
     return [];
@@ -14,7 +14,7 @@ List<FortniteVersion> readVersions() {
     return decodedVersionsJson
         .map((entry) {
       try {
-        return FortniteVersion.fromJson(entry);
+        return GameVersion.fromJson(entry);
       }catch(error) {
         throw "Cannot parse version: $error";
       }
@@ -25,7 +25,7 @@ List<FortniteVersion> readVersions() {
   }
 }
 
-void writeVersion(FortniteVersion version) {
+void writeVersion(GameVersion version) {
   final versions = readVersions();
   versions.add(version);
   _versionsFile.writeAsString(jsonEncode(versions.map((version) => version.toJson()).toList()));
