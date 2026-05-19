@@ -44,9 +44,13 @@ jobs:
           if (-not (Test-Path $cliOutput)) {
             throw "Expected CLI output file not found: $cliOutput"
           }
-          $guiOutput = "gui/build/windows/x64/runner/Release"
+          $guiOutputCandidates = @(
+            "gui/build/windows/x64/runner/Release",
+            "gui/build/windows/x64/Release/Runner"
+          )
+          $guiOutput = $guiOutputCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not (Test-Path $guiOutput)) {
-            throw "Expected GUI output directory not found: $guiOutput"
+            throw "Expected GUI output directory not found in: $($guiOutputCandidates -join ', ')"
           }
           Compress-Archive -Path $cliOutput -DestinationPath "artifacts/reboot-cli-windows.zip" -Force
           Compress-Archive -Path "$guiOutput/*" -DestinationPath "artifacts/reboot-gui-windows.zip" -Force
