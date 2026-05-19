@@ -1,8 +1,9 @@
 name: Build GUI and CLI Release Artifacts
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
@@ -58,6 +59,8 @@ jobs:
       - name: Upload artifacts to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: "30.10-support"
+          name: "30.10+ Support"
           files: |
             artifacts/reboot-cli-windows.zip
             artifacts/reboot-gui-windows.zip
