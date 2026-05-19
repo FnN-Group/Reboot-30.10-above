@@ -8,6 +8,10 @@ import 'package:reboot_common/common.dart';
 import 'package:win32/win32.dart';
 import 'package:path/path.dart' as path;
 
+const int WBEM_FLAG_RETURN_IMMEDIATELY = 16;
+const int WBEM_FLAG_FORWARD_ONLY = 32;
+const int VT_BSTR = 8;
+
 bool useDefaultPath = false;
 
 Directory get installationDirectory {
