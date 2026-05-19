@@ -1,1 +1,6 @@
 build_all.bat
+setup_env.bat
+build_cli.bat
+build_gui.bat
+setup_env.bat
+ci-local-build.ps1
