@@ -20,8 +20,9 @@ dependencies:
   reboot_common:
     path: ./../common
 
-  # Windows UI 3
-  fluent_ui: ^4.9.1
+  # Windows UI 3 — pinned exact: newer 4.x versions made PageSuggestion nullable
+  # and dropped the Brightness.isDark extension, breaking pager.dart and os.dart.
+  fluent_ui: 4.9.1
   flutter_acrylic: ^1.1.4
   fluentui_system_icons: ^1.1.258
   system_theme: ^3.1.1

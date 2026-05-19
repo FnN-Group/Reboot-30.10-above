@@ -248,10 +248,9 @@
       "languageVersion": "3.0"
     }
   ],
-  "generated": "2026-05-19T18:15:03.963524Z",
   "generator": "pub",
-  "generatorVersion": "3.6.0",
+  "generatorVersion": "3.8.0",
   "flutterRoot": "file:///C:/Users/sando/reboot_tools/flutter",
-  "flutterVersion": "3.27.1",
+  "flutterVersion": "3.32.0",
   "pubCache": "file:///C:/Users/sando/AppData/Local/Pub/Cache"
 }

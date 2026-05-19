@@ -1,8 +1,8 @@
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $ProgressPreference     = 'SilentlyContinue'
 
 $RepoRoot      = 'C:\Users\sando\Documents\GitHub\Reboot-30.10-above'
-$FlutterVer    = '3.27.1'
+$FlutterVer    = '3.32.0'
 $ToolsDir      = Join-Path $env:USERPROFILE 'reboot_tools'
 $FlutterDir    = Join-Path $ToolsDir 'flutter'
 $FlutterBin    = Join-Path $FlutterDir 'bin'
@@ -10,9 +10,39 @@ $FlutterExe    = Join-Path $FlutterBin 'flutter.bat'
 $DartExe       = Join-Path $FlutterBin 'dart.bat'
 $LogPath       = Join-Path $RepoRoot 'ci-local-build.log'
 
-function Log($msg) {
-    $ts = Get-Date -Format 'HH:mm:ss'
-    "[$ts] $msg" | Tee-Object -FilePath $LogPath -Append | Out-Host
+function Log {
+    param([string]$msg)
+    $line = '[' + (Get-Date -Format 'HH:mm:ss') + '] ' + $msg
+    Add-Content -Path $LogPath -Value $line -Encoding utf8
+    Write-Host $line
+}
+
+function Run {
+    param(
+        [Parameter(Mandatory=$true)][string]$Label,
+        [Parameter(Mandatory=$true)][string]$Exe,
+        [string[]]$ArgList = @(),
+        [string]$Cwd = $RepoRoot
+    )
+    Log "RUN: $Label"
+    Log "     cwd: $Cwd"
+    Log "     cmd: $Exe $($ArgList -join ' ')"
+    Push-Location $Cwd
+    try {
+        # Native exe call. 2>&1 merges stderr; with EAP=Continue the ErrorRecord
+        # wrapping in PS 5.1 just gets serialized as text by ForEach -> ToString.
+        & $Exe @ArgList 2>&1 | ForEach-Object {
+            $text = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { $_.ToString() }
+            Add-Content -Path $LogPath -Value $text -Encoding utf8
+        }
+        $code = $LASTEXITCODE
+        Log "     exit: $code"
+        if ($code -ne 0) {
+            throw "$Label failed with exit code $code"
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 if (Test-Path $LogPath) { Remove-Item $LogPath -Force }
@@ -20,7 +50,7 @@ Log "Starting local build orchestrator (PID $PID)"
 
 # --- 1. Flutter ---------------------------------------------------------------
 if (-not (Test-Path $FlutterExe)) {
-    Log "Flutter not found at $FlutterExe - downloading $FlutterVer..."
+    Log "Flutter not found - downloading $FlutterVer"
     if (-not (Test-Path $ToolsDir)) { New-Item -ItemType Directory -Path $ToolsDir | Out-Null }
     if (Test-Path $FlutterDir)      { Remove-Item $FlutterDir -Recurse -Force }
 
@@ -31,55 +61,28 @@ if (-not (Test-Path $FlutterExe)) {
     Log "Extracting to $ToolsDir"
     Expand-Archive -Path $zip -DestinationPath $ToolsDir -Force
     Remove-Item $zip -Force
-    Log "Flutter installed"
+    Log 'Flutter installed'
 } else {
-    Log "Flutter already present at $FlutterExe"
+    Log "Flutter present at $FlutterExe"
 }
 
 $env:PATH = $FlutterBin + ';' + $env:PATH
 
-Log 'Configuring Flutter (windows-desktop)'
-& $FlutterExe config --enable-windows-desktop 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
-
-Log 'flutter --version'
-& $FlutterExe --version 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+Run -Label 'flutter config --enable-windows-desktop' -Exe $FlutterExe -ArgList @('config','--enable-windows-desktop')
+Run -Label 'flutter --version'                       -Exe $FlutterExe -ArgList @('--version')
 
 # --- 2. pub get ---------------------------------------------------------------
-function PubGet($subdir) {
-    Log "flutter pub get  ($subdir)"
-    Push-Location (Join-Path $RepoRoot $subdir)
-    try {
-        & $FlutterExe pub get 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "pub get failed in $subdir (exit $LASTEXITCODE)" }
-    } finally { Pop-Location }
-}
-PubGet 'common'
-PubGet 'cli'
-PubGet 'gui'
-
-Log 'flutter gen-l10n (gui)'
-Push-Location (Join-Path $RepoRoot 'gui')
-try {
-    & $FlutterExe gen-l10n 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "gen-l10n failed (exit $LASTEXITCODE)" }
-} finally { Pop-Location }
+Run -Label 'pub get (common)' -Exe $FlutterExe -ArgList @('pub','get')  -Cwd (Join-Path $RepoRoot 'common')
+Run -Label 'pub get (cli)'    -Exe $FlutterExe -ArgList @('pub','get')  -Cwd (Join-Path $RepoRoot 'cli')
+Run -Label 'pub get (gui)'    -Exe $FlutterExe -ArgList @('pub','get')  -Cwd (Join-Path $RepoRoot 'gui')
+Run -Label 'gen-l10n (gui)'   -Exe $FlutterExe -ArgList @('gen-l10n')   -Cwd (Join-Path $RepoRoot 'gui')
 
 # --- 3. CLI build -------------------------------------------------------------
-Log 'Compiling reboot_cli.exe'
-Push-Location (Join-Path $RepoRoot 'cli')
-try {
-    & $DartExe compile exe lib/main.dart -o reboot_cli.exe 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "CLI compile failed (exit $LASTEXITCODE)" }
-} finally { Pop-Location }
+Run -Label 'compile reboot_cli.exe' -Exe $DartExe -ArgList @('compile','exe','lib/main.dart','-o','reboot_cli.exe') -Cwd (Join-Path $RepoRoot 'cli')
 Log 'CLI build OK'
 
 # --- 4. GUI build -------------------------------------------------------------
-Log 'flutter build windows --release (gui)'
-Push-Location (Join-Path $RepoRoot 'gui')
-try {
-    & $FlutterExe build windows --release 2>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "GUI build failed (exit $LASTEXITCODE)" }
-} finally { Pop-Location }
+Run -Label 'flutter build windows --release' -Exe $FlutterExe -ArgList @('build','windows','--release') -Cwd (Join-Path $RepoRoot 'gui')
 Log 'GUI build OK'
 
 # --- 5. Stage build_output ----------------------------------------------------

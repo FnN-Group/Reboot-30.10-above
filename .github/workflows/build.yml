@@ -26,10 +26,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Flutter 3.27.1
+      - name: Setup Flutter 3.32.0
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
+          flutter-version: '3.32.0'
           channel: 'stable'
           cache: true
 
@@ -78,12 +78,23 @@ jobs:
             Get-ChildItem "$dlls\*.dll" | Copy-Item -Destination stage\gui\ -Force
           }
 
-      - name: Package Zips
+      - name: Package release archive
         shell: pwsh
+        env:
+          BUILD_SIGNATURE: ${{ secrets.BUILD_SIGNATURE }}
         run: |
-          Compress-Archive -Path stage\cli\* -DestinationPath reboot_cli_30.10-plus.zip -Force
-          Compress-Archive -Path stage\gui\* -DestinationPath reboot_gui_30.10-plus.zip -Force
-          Compress-Archive -Path stage\*     -DestinationPath reboot_30.10-plus_full.zip -Force
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:BUILD_SIGNATURE)) {
+            throw "BUILD_SIGNATURE secret is not configured. Set it under Settings > Secrets and variables > Actions."
+          }
+          $sevenZip = (Get-Command 7z -ErrorAction SilentlyContinue).Source
+          if (-not $sevenZip) { $sevenZip = 'C:\Program Files\7-Zip\7z.exe' }
+          if (-not (Test-Path $sevenZip)) { throw "7-Zip not found." }
+
+          # AES-256 + header encryption (filenames hidden without password)
+          & $sevenZip a -t7z -mx=9 -mhe=on "-p$env:BUILD_SIGNATURE" `
+              "reboot_30.10-plus.7z" "stage\*" | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z packaging failed (exit $LASTEXITCODE)" }
 
       - name: Resolve Release Tag
         id: tag
@@ -110,22 +121,12 @@ jobs:
           body: |
             **Reboot Launcher — 30.10+ Support build**
 
-            Automated CI build of CLI and GUI for Fortnite 30.10 and above.
-
-            **Artifacts:**
-            - `reboot_cli.exe` — standalone CLI executable
-            - `reboot_cli_30.10-plus.zip` — CLI only
-            - `reboot_gui_30.10-plus.zip` — GUI release (runner + DLLs)
-            - `reboot_30.10-plus_full.zip` — CLI + GUI bundled
-
+            Encrypted archive — distribution restricted.
             Built from `${{ github.sha }}` on `${{ github.ref_name }}`.
           draft: false
           prerelease: false
           make_latest: true
           files: |
-            cli/reboot_cli.exe
-            reboot_cli_30.10-plus.zip
-            reboot_gui_30.10-plus.zip
-            reboot_30.10-plus_full.zip
+            reboot_30.10-plus.7z
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
