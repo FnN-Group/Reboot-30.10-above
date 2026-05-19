@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build Reboot 30.10+ Support
 
 on:
   push:
@@ -7,23 +7,29 @@ on:
       - master
     tags:
       - 'v*'
+      - '30.10*'
   workflow_dispatch:
+    inputs:
+      release_name:
+        description: 'Release display name'
+        required: false
+        default: 'Reboot 30.10+ Support'
 
 jobs:
   build:
-    name: Build GUI and CLI
+    name: Build CLI + GUI (Windows)
     runs-on: windows-latest
     permissions:
       contents: write
-      discussions: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Flutter
+      - name: Setup Flutter 3.27.1
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.27.1'
           channel: 'stable'
           cache: true
 
@@ -31,77 +37,95 @@ jobs:
         run: flutter config --enable-windows-desktop
 
       - name: Get Dependencies
-        run: |
-          cd common
-          flutter pub get
-          cd ../cli
-          flutter pub get --offline || flutter pub get
-          cd ../gui
-          flutter pub get --offline || flutter pub get
-          flutter gen-l10n
-
-      - name: Build CLI (Windows EXE)
-        run: |
-          cd cli
-          dart compile exe lib/main.dart -o reboot_cli.exe
-
-      - name: Build GUI (Windows)
-        run: |
-          cd gui
-          flutter build windows --release
-
-      - name: Prepare Artifacts
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path release_assets
-          
-          # CLI
-          if (Test-Path "cli/reboot_cli.exe") {
-            Copy-Item "cli/reboot_cli.exe" -Destination "release_assets/"
-          }
-          
-          # GUI
-          $guiPath = "gui/build/windows/x64/runner/Release"
-          if (Test-Path $guiPath) {
-            Get-ChildItem -Path "$guiPath/*" | Copy-Item -Destination "release_assets/" -Recurse -Force
-          }
-          
-          # Additional DLLs
-          $dllPath = "gui/dependencies/dlls"
-          if (Test-Path $dllPath) {
-            Get-ChildItem -Path "$dllPath/*.dll" | Copy-Item -Destination "release_assets/" -Force -ErrorAction SilentlyContinue
-          }
-          
-          # Create Zip
-          Compress-Archive -Path "release_assets/*" -DestinationPath "reboot_windows.zip" -Force
+          Push-Location common;  flutter pub get; Pop-Location
+          Push-Location cli;     flutter pub get; Pop-Location
+          Push-Location gui;     flutter pub get; flutter gen-l10n; Pop-Location
 
-      - name: Generate Release Tag
+      - name: Build CLI (reboot_cli.exe)
+        shell: pwsh
+        run: |
+          Push-Location cli
+          dart compile exe lib/main.dart -o reboot_cli.exe
+          Pop-Location
+
+      - name: Build GUI (Windows Release)
+        shell: pwsh
+        run: |
+          Push-Location gui
+          flutter build windows --release
+          Pop-Location
+
+      - name: Stage Artifacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path stage\cli  | Out-Null
+          New-Item -ItemType Directory -Force -Path stage\gui  | Out-Null
+
+          # CLI
+          Copy-Item cli\reboot_cli.exe stage\cli\ -Force
+
+          # GUI runner output
+          $guiRelease = "gui\build\windows\x64\runner\Release"
+          if (-not (Test-Path $guiRelease)) { throw "GUI build output not found at $guiRelease" }
+          Copy-Item "$guiRelease\*" stage\gui\ -Recurse -Force
+
+          # Bundled DLLs (cobalt/console/memory/sinum/starfall)
+          $dlls = "gui\dependencies\dlls"
+          if (Test-Path $dlls) {
+            Get-ChildItem "$dlls\*.dll" | Copy-Item -Destination stage\gui\ -Force
+          }
+
+      - name: Package Zips
+        shell: pwsh
+        run: |
+          Compress-Archive -Path stage\cli\* -DestinationPath reboot_cli_30.10-plus.zip -Force
+          Compress-Archive -Path stage\gui\* -DestinationPath reboot_gui_30.10-plus.zip -Force
+          Compress-Archive -Path stage\*     -DestinationPath reboot_30.10-plus_full.zip -Force
+
+      - name: Resolve Release Tag
         id: tag
         shell: pwsh
         run: |
           if ("${{ github.ref }}" -like "refs/tags/*") {
-            $tag = "${{ github.ref_name }}"
+            $tag  = "${{ github.ref_name }}"
+            $name = "${{ github.event.inputs.release_name }}"
+            if ([string]::IsNullOrWhiteSpace($name)) { $name = "Reboot 30.10+ Support ($tag)" }
           } else {
-            $tag = "Build-" + (Get-Date -Format "yyyy.MM.dd-HHmm")
+            $stamp = Get-Date -Format "yyyy.MM.dd-HHmm"
+            $tag   = "30.10-plus-$stamp-${{ github.run_number }}"
+            $name  = "${{ github.event.inputs.release_name }}"
+            if ([string]::IsNullOrWhiteSpace($name)) { $name = "Reboot 30.10+ Support" }
           }
-          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=$tag"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "name=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Push Release to Fork
+      - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Release ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.name }}
           body: |
-            Automated build for Reboot 30.10+
-            
-            **Included:**
-            - `reboot_cli.exe`
-            - `reboot_windows.zip` (GUI and all tools)
+            **Reboot Launcher — 30.10+ Support build**
+
+            Automated CI build of CLI and GUI for Fortnite 30.10 and above.
+
+            **Artifacts:**
+            - `reboot_cli.exe` — standalone CLI executable
+            - `reboot_cli_30.10-plus.zip` — CLI only
+            - `reboot_gui_30.10-plus.zip` — GUI release (runner + DLLs)
+            - `reboot_30.10-plus_full.zip` — CLI + GUI bundled
+
+            Built from `${{ github.sha }}` on `${{ github.ref_name }}`.
           draft: false
-          make_latest: true
           prerelease: false
+          make_latest: true
           files: |
             cli/reboot_cli.exe
-            reboot_windows.zip
+            reboot_cli_30.10-plus.zip
+            reboot_gui_30.10-plus.zip
+            reboot_30.10-plus_full.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
