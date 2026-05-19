@@ -48,7 +48,7 @@ jobs:
       - name: Build GUI (Windows)
         run: |
           cd gui
-          flutter build windows --release
+          flutter build windows --release --verbose
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -56,16 +56,20 @@ jobs:
           New-Item -ItemType Directory -Force -Path release_assets
           
           # CLI
-          Copy-Item "cli/reboot_cli.exe" -Destination "release_assets/"
+          if (Test-Path "cli/reboot_cli.exe") {
+            Copy-Item "cli/reboot_cli.exe" -Destination "release_assets/"
+          }
           
           # GUI
-          if (Test-Path "gui/build/windows/x64/runner/Release") {
-            Copy-Item -Path "gui/build/windows/x64/runner/Release/*" -Destination "release_assets/" -Recurse
+          $guiPath = "gui/build/windows/x64/runner/Release"
+          if (Test-Path $guiPath) {
+            Get-ChildItem -Path "$guiPath/*" | Copy-Item -Destination "release_assets/" -Recurse -Force
           }
           
           # Additional DLLs
-          if (Test-Path "gui/dependencies/dlls") {
-            Copy-Item -Path "gui/dependencies/dlls/*.dll" -Destination "release_assets/" -ErrorAction SilentlyContinue
+          $dllPath = "gui/dependencies/dlls"
+          if (Test-Path $dllPath) {
+            Get-ChildItem -Path "$dllPath/*.dll" | Copy-Item -Destination "release_assets/" -Force -ErrorAction SilentlyContinue
           }
           
           # Create Zip
@@ -80,7 +84,7 @@ jobs:
           } else {
             $tag = "Build-" + (Get-Date -Format "yyyy.MM.dd-HHmm")
           }
-          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Push Release to Fork
         uses: softprops/action-gh-release@v2
