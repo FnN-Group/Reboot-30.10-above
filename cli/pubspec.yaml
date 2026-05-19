@@ -5,7 +5,7 @@ version: "10.0.7"
 publish_to: 'none'
 
 environment:
-  sdk: ">=3.0.0 <=3.5.3"
+  sdk: ">=3.0.0 <=4.0.0"
 
 dependencies:
   reboot_common:

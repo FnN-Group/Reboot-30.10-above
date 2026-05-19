@@ -48,7 +48,7 @@ jobs:
       - name: Build GUI (Windows)
         run: |
           cd gui
-          flutter build windows --release --verbose
+          flutter build windows --release
 
       - name: Prepare Artifacts
         shell: pwsh
