@@ -26,6 +26,7 @@ jobs:
         run: |
           cd cli
           dart pub get
+          mkdir -p build
           dart compile exe lib/main.dart -o build/reboot-cli.exe
 
       - name: Upload CLI Artifact
