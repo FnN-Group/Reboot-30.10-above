@@ -1,0 +1,88 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build GUI and CLI
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Get Dependencies (Common)
+        run: |
+          cd common
+          flutter pub get
+
+      - name: Get Dependencies (CLI)
+        run: |
+          cd cli
+          flutter pub get
+
+      - name: Get Dependencies (GUI)
+        run: |
+          cd gui
+          flutter pub get
+
+      - name: Build CLI (Windows EXE)
+        run: |
+          cd cli
+          dart compile exe lib/main.dart -o reboot_cli.exe
+
+      - name: Build GUI (Windows)
+        run: |
+          cd gui
+          flutter build windows --release
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir release_assets
+          cp cli/reboot_cli.exe release_assets/
+          cp -r gui/build/windows/x64/runner/Release/* release_assets/
+          cp gui/dependencies/dlls/*.dll release_assets/
+          cd release_assets
+          7z a ../reboot_windows.zip *
+
+      - name: Generate Release Tag
+        id: tag
+        shell: bash
+        run: echo "release_tag=Build-$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Push Release to Fork
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.tag.outputs.release_tag }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || steps.tag.outputs.release_tag }}
+          body: |
+            Automated build from commit ${{ github.sha }}
+            
+            **Files Included:**
+            - `reboot_cli.exe` (Standalone CLI)
+            - `reboot_windows.zip` (GUI + All required DLLs)
+          draft: false
+          prerelease: false
+          files: |
+            cli/reboot_cli.exe
+            reboot_windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
