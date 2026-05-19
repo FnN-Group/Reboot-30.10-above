@@ -24,7 +24,6 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
           channel: 'stable'
           cache: true
 
@@ -36,9 +35,9 @@ jobs:
           cd common
           flutter pub get
           cd ../cli
-          flutter pub get
+          flutter pub get --offline || flutter pub get
           cd ../gui
-          flutter pub get
+          flutter pub get --offline || flutter pub get
           flutter gen-l10n
 
       - name: Build CLI (Windows EXE)
